@@ -22,17 +22,31 @@ closing_prices = closing_prices.fillna(method = 'ffill') #ffill stands for Forwa
 
 #Feature Scaling
 from sklearn.preprocessing import StandardScaler
-'Left here. Figure out how to scale only values and keep the data format.'
 scaler = StandardScaler()
 closing_prices = scaler.fit_transform(closing_prices)
+closing_prices = pd.DataFrame(data = {'AAPL': closing_prices[:, 0], 'MSFT': closing_prices[:, 1],
+                                        'SPY': closing_prices[:, 2]}, index = all_weekdays)
 
 #Splitting into train/test
-from sklearn.model_selection import train_test_split
-x_train, x_test, y_train, y_test = train_test_split(x, y, train_size)
-'Wait what, how do you even split a single column dataset. Maybe use Facebook library'
+
 
 #Benchmark Accuracy
 'Logistic Regression first then try SVR'
+
+#Plotting the Original Graph
+closing_prices = scaler.inverse_transform(closing_prices)
+closing_prices = pd.DataFrame(data = {'AAPL': closing_prices[:, 0], 'MSFT': closing_prices[:, 1],
+                                        'SPY': closing_prices[:, 2]}, index = all_weekdays)
+plt.plot(closing_prices.index, closing_prices['AAPL'], color = 'blue')
+plt.plot(closing_prices.index, closing_prices['MSFT'], color = 'green')
+plt.plot(closing_prices.index, closing_prices['SPY'], color = 'yellow')
+plt.tick_params(labelsize = '8') #Adjusting the xlabel and ylabel font size.
+plt.title("Line Chart for Closing Prices")
+plt.xlabel('Date')
+plt.ylabel("Closing Price ($)")
+plt.legend()
+plt.grid()
+plt.show()
 
 #References
 """
