@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 
 #Retrieving Dataset
 from pandas_datareader import data
+from datetime import datetime
 ticker = ['AAPL', 'MSFT', 'SPY']
 start_date = '2015-01-02' #Only 2015 onwards due to FREE data source. YYYY-MM-DD
-end_date = '2019-01-01'
+end_date = datetime.now()
 dataset = data.DataReader(ticker, 'stooq', start_date, end_date)
 
 #Cleaning Dataset
@@ -28,10 +29,30 @@ closing_prices = pd.DataFrame(data = {'AAPL': closing_prices[:, 0], 'MSFT': clos
                                         'SPY': closing_prices[:, 2]}, index = all_weekdays)
 
 #Splitting into train/test
-
+"""
+    Splitting the dataset into 'train' and 'test', under 'train' we have 'x_train' and 'y_train'.
+    Removing the same number of values as the length of 'test' under 'shifted_data'.
+    'first_ticker' is to make the code more dynamic instead of adjusting the code for every new ticker.
+    Calculated 'row_count' in this way to avoid having the length of each individual ticker, and
+    get a singular value instead.
+"""
+splitter = np.random.rand(len(closing_prices)) < 0.8 #Single column splitting.
+x_train = closing_prices[splitter]
+test = closing_prices[~splitter]
+shifted_data = closing_prices.shift(-len(test))
+first_ticker = closing_prices.columns[0]
+row_count = len(closing_prices) - shifted_data[first_ticker].count()
+shifted_array = np.array(shifted_data)
+y_train = shifted_array[-row_count:]
+y_train = pd.DataFrame(data = {'AAPL': y_train[:, 0], 'MSFT': y_train[:, 1],
+                                'SPY': y_train[:, 2]}, index = all_weekdays[-row_count:])
 
 #Benchmark Accuracy
-'Logistic Regression first then try SVR'
+from sklearn.linear_model import LinearRegression
+linear_r = LinearRegression()
+linear_r.fit(x_train, y_train)
+benchmark = linear_r.predict(test)
+
 
 #Plotting the Original Graph
 closing_prices = scaler.inverse_transform(closing_prices)
@@ -51,4 +72,5 @@ plt.show()
 #References
 """
     https://learndatasci.com/tutorials/python-finance-part-yahoo-finance-api-pandas-matplotlib/
+    https://towardsdatascience.com/predicting-stock-prices-with-python-ec1d0c9bece1
 """
