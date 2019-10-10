@@ -20,27 +20,37 @@ closing_prices = dataset['Close']
 all_weekdays = pd.date_range(start = start_date, end = end_date, freq = 'B') #B is Business Days.
 closing_prices = closing_prices.reindex(all_weekdays) #To include all missing dates.
 closing_prices = closing_prices.fillna(method = 'ffill') #ffill stands for Forward Fill
-
-#Splitting into train/test
-forecast_out = 30 #days
-closing_prices['Prediction'] = closing_prices.shift(-forecast_out) #Shift down by n days
-
-
-#Benchmark Accuracy
-from sklearn.linear_model import LinearRegression
-linear_r = LinearRegression()
-linear_r.fit(x_train, y_train)
-benchmark = linear_r.predict(test)
-
+closing_prices = closing_prices.to_frame() #Convert to Dataframe
 
 #Plotting the Original Graph
-plt.plot(closing_prices.index, closing_prices, color = 'blue')
+"""
+plt.plot(all_weekdays, closing_prices, color = 'blue')
 plt.tick_params(labelsize = '8') #Adjusting the xlabel and ylabel font size.
 plt.title("Line Chart for Closing Prices of " + ticker)
 plt.xlabel('Date')
 plt.ylabel("Closing Price ($)")
 plt.grid()
 plt.show()
+"""
+
+#Shifting Values Out for Prediction and Comparison by using Past Prices to Reflect Future Prices
+forecast_out = 20 #days
+closing_prices['Prediction'] = closing_prices.shift(-forecast_out) #Shift down by n days
+
+#X and y Values
+X = closing_prices[:-forecast_out].drop(columns = 'Prediction')
+y = closing_prices[:-forecast_out].drop(columns = 'Close')
+
+#Splitting into Train/Test for Benchmark
+from sklearn.model_selection import train_test_split
+xtrain_eg, xtest_eg, ytrain_eg, ytest_eg = train_test_split(X, y, test_size = 0.2, random_state = 123)
+
+#Benchmark Linear Regression
+from sklearn.linear_model import LinearRegression
+linear_r = LinearRegression()
+linear_r.fit(xtrain_eg, ytrain_eg)
+benchmark = linear_r.score(xtest_eg, ytest_eg)
+print("Benchmark Accuracy: " + str(benchmark))
 
 #References
 """
