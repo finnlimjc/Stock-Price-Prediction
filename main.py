@@ -2,13 +2,13 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import datetime
 
 #Retrieving Dataset
 from pandas_datareader import data
-from datetime import datetime
 ticker = 'AAPL'
 start_date = '2015-01-02' #Only 2015 onwards due to FREE data source. YYYY-MM-DD
-end_date = datetime.now()
+end_date = datetime.date.today()
 dataset = data.DataReader(ticker, 'stooq', start_date, end_date)
 
 #Cleaning Dataset
@@ -52,6 +52,34 @@ linear_r.fit(xtrain_eg, ytrain_eg)
 benchmark = linear_r.score(xtest_eg, ytest_eg)
 print("Benchmark Accuracy: " + str(benchmark))
 
+#Predicting Future Prices by n days
+benchmark_forecast = closing_prices[-forecast_out:].drop(columns = 'Prediction')
+ypred_eg = linear_r.predict(benchmark_forecast)
+tomorrow = end_date + datetime.timedelta(days = 1)
+future_weekdays = pd.date_range(start = tomorrow, periods = forecast_out, freq = 'B')
+future_prices = pd.DataFrame(data = {'Prediction': ypred_eg.flatten()}, index = future_weekdays)
+final_dataset = closing_prices.drop(columns = 'Prediction')
+final_dataset = final_dataset.append(future_prices, sort = True)
+
+#Plotting the Next n Days of Stock Price
+plt.plot(all_weekdays, closing_prices['Close'], color = 'blue') #Previous Prices
+plt.plot(future_weekdays, future_prices, color = 'green') #Future Prices
+plt.tick_params(labelsize = '8') #Adjusting the xlabel and ylabel font size.
+plt.title("Line Chart for Closing Prices of " + ticker)
+plt.xlabel('Date')
+plt.ylabel("Closing Price ($)")
+plt.grid()
+plt.show()
+
+#Plotting the Prediction Only
+plt.plot(future_weekdays, future_prices, color = 'green') #Future Prices
+plt.tick_params(labelsize = '6') #Adjusting the xlabel and ylabel font size.
+plt.title("Line Chart for Predicted Prices of " + ticker)
+plt.xlabel('Date')
+plt.ylabel("Closing Price ($)")
+plt.grid()
+plt.show()
+
 #References
 """
     https://learndatasci.com/tutorials/python-finance-part-yahoo-finance-api-pandas-matplotlib/
@@ -77,4 +105,11 @@ shifted_array = np.array(shifted_data)
 y_train = shifted_array[-row_count:]
 y_train = pd.DataFrame(data = {'AAPL': y_train[:, 0], 'MSFT': y_train[:, 1],
                                 'SPY': y_train[:, 2]}, index = all_weekdays[-row_count:])
+
+
+difference_end = end_date + datetime.timedelta(days = forecast_out)
+difference_weekdays = pd.date_range(start = start_date, end = difference_end, freq = 'B')
+difference_amount = len(final_dataset) - len(difference_weekdays) #Due to exclusion of weekends.
+future_end = difference_end + datetime.timedelta(days = difference_amount)
+future_weekdays = pd.date_range(start = start_date, end = future_end, freq = 'B')
 """
