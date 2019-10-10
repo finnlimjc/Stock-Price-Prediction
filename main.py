@@ -1,4 +1,4 @@
-#Predicting Stock Prices (Last Update: Oct 8, 2019)
+#Predicting Stock Prices (Last Update: Oct 10, 2019)
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -43,23 +43,51 @@ y = closing_prices[:-forecast_out].drop(columns = 'Close')
 
 #Splitting into Train/Test for Benchmark
 from sklearn.model_selection import train_test_split
-xtrain_eg, xtest_eg, ytrain_eg, ytest_eg = train_test_split(X, y, test_size = 0.2, random_state = 123)
+x_train, x_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 123)
 
-#Benchmark Linear Regression
+#Benchmark Accuracy using Linear Regression
 from sklearn.linear_model import LinearRegression
 linear_r = LinearRegression()
-linear_r.fit(xtrain_eg, ytrain_eg)
-benchmark = linear_r.score(xtest_eg, ytest_eg)
-print("Benchmark Accuracy: " + str(benchmark))
+linear_r.fit(x_train, y_train)
+benchmark = linear_r.score(x_test, y_test)
 
-#Predicting Future Prices by n days
-benchmark_forecast = closing_prices[-forecast_out:].drop(columns = 'Prediction')
-ypred_eg = linear_r.predict(benchmark_forecast)
-tomorrow = end_date + datetime.timedelta(days = 1)
-future_weekdays = pd.date_range(start = tomorrow, periods = forecast_out, freq = 'B')
-future_prices = pd.DataFrame(data = {'Prediction': ypred_eg.flatten()}, index = future_weekdays)
-final_dataset = closing_prices.drop(columns = 'Prediction')
-final_dataset = final_dataset.append(future_prices, sort = True)
+#Cross Validation using Linear Regression to Evaluate Model
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_predict
+from sklearn import metrics
+
+def cross_validation (estimator, x_train, y_train, x_test, y_test):
+    accuracies = cross_val_score(estimator = estimator, X = x_train, y = y_train, cv = 20)
+    predict = cross_val_predict(estimator = estimator, X = x_test, y = y_test, cv = 20)
+    predscore = metrics.r2_score(y_true = y_test, y_pred = predict)
+    print("Linear Regression Average Accuracy: " + str(accuracies.mean()) + " (Train Set)")
+    print("Linear Regression Average Accuracy: " + str(predscore) + " (Test Set)")
+    return predict
+
+linear_r_kfold = LinearRegression()
+linear_r_predscore = cross_validation(linear_r_kfold, x_train, y_train, x_test, y_test)
+
+#Printing All Accuracies
+print("Linear Regression Accuracy: " + str(benchmark))
+print("Linear Regression Average Accuracy: " + str(linear_r_predscore))
+
+#Predicting Future Prices by n days using Benchmark
+def y_pred(estimator, prepared_dataset):
+    forecast_out = 20
+    forecast = prepared_dataset[-forecast_out:].drop(columns = 'Prediction')
+    y_pred = estimator.predict(forecast)
+    return y_pred
+
+    end_date = datetime.date.today()
+    tomorrow = end_date + datetime.timedelta(days = 1)
+    forecast_out = 20    
+    future_weekdays = pd.date_range(start = tomorrow, periods = forecast_out, freq = 'B')
+    future_prices = pd.DataFrame(data = {'Prediction': y_pred.flatten()}, index = future_weekdays)
+    final_dataset = prepared_dataset.drop(columns = 'Prediction')
+    final_dataset = final_dataset.append(future_prices, sort = True)
+    return final_dataset
+
+linear_regression = y_pred(estimator = linear_r_kfold, prepared_dataset = closing_prices)
 
 #Plotting the Next n Days of Stock Price
 plt.plot(all_weekdays, closing_prices['Close'], color = 'blue') #Previous Prices
