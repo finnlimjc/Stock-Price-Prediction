@@ -1,4 +1,4 @@
-#Predicting Stock Prices (Last Update: Oct 10, 2019)
+#Predicting Stock Prices (Last Update: Oct 12, 2019)
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,7 +20,10 @@ def get_data(ticker, start_date, end_date, source):
     ticker = ticker
     start_date = start_date #Only 2015 onwards due to FREE data source. YYYY-MM-DD
     dataset = data.DataReader(ticker, source, start_date, end_date)
-    return dataset
+    if (dataset.empty is True):
+        print("Ticker symbol, source or dates are either unavailable or incorrect.")
+    else:
+        return dataset
 ticker = 'AAPL'
 start_date = '2015-01-02'
 end_date = datetime.date.today()
@@ -38,15 +41,14 @@ closing_prices = closing_prices.fillna(method = 'ffill') #ffill stands for Forwa
 closing_prices = closing_prices.to_frame() #Convert to Dataframe
 
 #Plotting the Original Graph
-"""
-plt.plot(all_weekdays, closing_prices, color = 'blue')
-plt.tick_params(labelsize = '8') #Adjusting the xlabel and ylabel font size.
-plt.title("Line Chart for Closing Prices of " + ticker)
-plt.xlabel('Date')
-plt.ylabel("Closing Price ($)")
-plt.grid()
-plt.show()
-"""
+# plt.plot(all_weekdays, closing_prices, color = 'blue')
+# plt.tick_params(labelsize = '8') #Adjusting the xlabel and ylabel font size.
+# plt.title("Line Chart for Closing Prices of " + ticker)
+# plt.xlabel('Date')
+# plt.ylabel("Closing Price ($)")
+# plt.grid()
+# plt.show()
+
 
 #Shifting Values Out for Prediction and Comparison by using Past Prices to Reflect Future Prices
 forecast_out = 20 #days
@@ -56,7 +58,7 @@ closing_prices['Prediction'] = closing_prices.shift(-forecast_out) #Shift down b
 X = closing_prices[:-forecast_out].drop(columns = 'Prediction')
 y = closing_prices[:-forecast_out].drop(columns = 'Close')
 
-#Splitting into Train/Test for Benchmark
+#Splitting into Train/Test
 from sklearn.model_selection import train_test_split
 x_train, x_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 123)
 
@@ -65,9 +67,16 @@ from sklearn.linear_model import LinearRegression
 linear_r = LinearRegression()
 linear_r.fit(x_train, y_train)
 benchmark = linear_r.score(x_test, y_test)
-print("Linear Regression Accuracy: " + str(round_to_2dp(benchmark)) + "%")
 
-#Cross Validation using Linear Regression to Evaluate Model
+#Using Support Vector Regression
+from sklearn.svm import SVR
+svr = SVR(kernel = 'linear')
+svr.fit(x_train, np.ravel(y_train))
+svr_accuracy = svr.score(x_test, np.ravel(y_test))
+
+#Using Facebook Prophet
+
+#Cross Validation to Evaluate Models
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import cross_val_predict
 from sklearn import metrics
@@ -88,8 +97,11 @@ def cross_validation (estimator, x_train, y_train, x_test, y_test, name):
     print(name + " Average Accuracy: " + str(round_to_2dp(predscore)) + "% (Test Set)")
     return predict_result
 linear_r_test = cross_validation(linear_r, x_train, y_train, x_test, y_test, "Linear Regression")
+svr_test = cross_validation(svr, x_train, np.ravel(y_train), x_test, np.ravel(y_test), "SVR")
 
 #Predicting Future Prices by n days using Benchmark
+future_weekdays = pd.date_range(start = end_date, periods = forecast_out + 1, freq = 'B')
+
 def y_pred(estimator, prepared_dataset):
     """
     estimator = model
@@ -99,26 +111,33 @@ def y_pred(estimator, prepared_dataset):
     forecast = prepared_dataset[-forecast_out:].drop(columns = 'Prediction')
     y_pred = estimator.predict(forecast)
     return y_pred
-def plotting_data (y_pred, prepared_dataset):
+def plotting_data (y_pred, prepared_dataset, future_weekdays):
     """
     y_pred = future predicted prices
-    returns data for plotting of charts (REQUIRES 3 CONTAINERS)
+    returns data for plotting of charts (REQUIRES 2 CONTAINERS)
     """
-    end_date = datetime.date.today()
-    tomorrow = end_date + datetime.timedelta(days = 1)
-    forecast_out = 20    
-    future_weekdays = pd.date_range(start = tomorrow, periods = forecast_out, freq = 'B')
-    future_prices = pd.DataFrame(data = {'Prediction': y_pred.flatten()}, index = future_weekdays)
-    final_dataset = prepared_dataset.drop(columns = 'Prediction')
-    final_dataset = final_dataset.append(future_prices, sort = True)
-    return final_dataset, future_weekdays, future_prices
+    last_price = 1
 
-#All Future Predicted Prices
+    final_dataset = prepared_dataset.drop(columns = 'Prediction')
+    last_price = final_dataset['Close'][-last_price:]
+    y_pred = np.insert(y_pred, 0, last_price) #To connect the line between old and new prices
+    future_prices = pd.DataFrame(data = {'Prediction': y_pred.flatten()}, index = future_weekdays)
+    final_dataset = final_dataset.append(future_prices, sort = True)
+
+    return final_dataset, future_prices
+
 linear_regression = y_pred(estimator = linear_r, prepared_dataset = closing_prices)
-linear_regression, lr_weekdays, lr_prices = plotting_data(linear_regression, closing_prices)
+linear_regression, lr_prices = plotting_data(linear_regression, closing_prices, future_weekdays)
+
+sp_vector_regression = y_pred(estimator = svr, prepared_dataset = closing_prices)
+sp_vector_regression, svr_prices = plotting_data(sp_vector_regression, closing_prices, future_weekdays)
+
+#Printing Models' Accuracy
+print("Linear Regression Accuracy: " + str(round_to_2dp(benchmark)) + "%")
+print("SVR Accuracy: " + str(round_to_2dp(svr_accuracy)) + "%")
 
 #Plotting the Next n Days of Stock Price
-def macro_plot (name, all_weekdays, prepared_dataset, future_weekdays, future_prices, ticker):
+def macroplot (name, all_weekdays, prepared_dataset, future_weekdays, future_prices, ticker):
     """
     name = name of model
     all_weekdays has been declared above.
@@ -131,21 +150,33 @@ def macro_plot (name, all_weekdays, prepared_dataset, future_weekdays, future_pr
     plt.plot(future_weekdays, future_prices, color = 'green') #Future Prices
     plt.tick_params(labelsize = '8') #Adjusting the xlabel and ylabel font size.
     plt.title("Line Chart for Closing Prices of " + ticker)
-    plt.suptitle("Linear Regression", size = 12)
+    plt.suptitle(name, size = 12)
     plt.xlabel('Date')
     plt.ylabel("Closing Price ($)")
     plt.grid()
     plt.show()
-macro_plot("Linear Regression", all_weekdays, closing_prices, lr_weekdays, lr_prices, ticker)
+# macroplot("Linear Regression", all_weekdays, closing_prices, future_weekdays, lr_prices, ticker)
+# macroplot("Support Vector Regression", all_weekdays, closing_prices, future_weekdays, svr_prices, ticker)
 
 #Plotting the Prediction Only
-plt.plot(lr_weekdays, lr_prices, color = 'green') #Future Prices
-plt.tick_params(labelsize = '6') #Adjusting the xlabel and ylabel font size.
-plt.title("Line Chart for Predicted Prices of " + ticker)
-plt.xlabel('Date')
-plt.ylabel("Closing Price ($)")
-plt.grid()
-plt.show()
+def microplot (name, future_weekdays, future_prices, ticker):
+    """
+    name = name of model
+    future_weekdays = the weekdays that indexes the prices we have predicted.
+    future_prices = the predicted prices
+    ticker has been declared above.
+    shows a line chart of only predicted prices and the the price the day before.
+    """
+    plt.plot(future_weekdays, future_prices, color = 'green') #Future Prices
+    plt.tick_params(labelsize = '6') #Adjusting the xlabel and ylabel font size.
+    plt.title("Line Chart for Predicted Prices of " + ticker)
+    plt.suptitle(name, size = 12)
+    plt.xlabel('Date')
+    plt.ylabel("Closing Price ($)")
+    plt.grid()
+    plt.show()
+# microplot("Linear Regression", future_weekdays, lr_prices, ticker)
+# microplot("Support Vector Regression", future_weekdays, lr_prices, ticker)
 
 #References
 """
